@@ -1,62 +1,63 @@
 // src/App.jsx
-import { useState, useEffect } from 'react'
-import { supabase } from './supabaseClient'
-import Auth from './Auth'
-import Dashboard from './Dashboard'
-import UserManagement from './UserManagement'
-//import Admin from './Admin' // Import the new component
+import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { supabase } from './supabaseClient';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+
+import Auth from './Auth';
+import Layout from './Layout';
+import Dashboard from './Dashboard';
+import UserManagement from './UserManagement';
+
+const theme = createTheme(); // Use the default MUI theme
 
 function App() {
-  const [session, setSession] = useState(null)
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [view, setView] = useState('dashboard'); // 'dashboard' or 'admin'
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      // Check for admin role on initial load
-      setIsAdmin(session?.user?.user_metadata?.role === 'admin');
-    })
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      setLoading(false);
+    };
+    getSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      // Check for admin role on any auth change
-      setIsAdmin(session?.user?.user_metadata?.role === 'admin');
-      setView('dashboard'); // Reset to dashboard view on login/logout
-    })
+      setSession(session);
+    });
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => subscription.unsubscribe();
+  }, []);
 
-  // Helper to render the main content
-  const renderContent = () => {
-    if (view === 'user_management' && isAdmin) {
-    return <UserManagement />;
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (loading) {
+    return <div>Loading...</div>; // Or a nice spinner component
   }
-    // Default to dashboard
-    return <Dashboard key={session.user.id} session={session} />;
-  }
-
+  
   return (
-    <div className="container">
-      {!session ? (
-        <Auth />
-      ) : (
-        <div>
-          {/* Admin Navigation */}
-          {isAdmin && (
-        <div style={{marginBottom: '20px', paddingBottom: '10px', borderBottom: '1px solid #eee'}}>
-          <button onClick={() => setView('dashboard')} disabled={view === 'dashboard'}>Dashboard</button>
-          {/* CHANGE THE VIEW NAME AND THE BUTTON TEXT */}
-          <button onClick={() => setView('user_management')} disabled={view === 'user_management'} style={{marginLeft: '10px'}}>Manage Users</button>
-        </div>
+    <ThemeProvider theme={theme}>
+      <BrowserRouter>
+        {!session ? (
+          <Auth />
+        ) : (
+          <Layout onSignOut={handleSignOut}>
+            <Routes>
+              <Route path="/" element={<Dashboard session={session} />} />
+              {session.user?.user_metadata?.role === 'admin' && (
+                 <Route path="/users" element={<UserManagement />} />
+              )}
+              {/* Redirect any unknown paths to the dashboard */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Layout>
         )}
-          {/* Main Content Area */}
-          {renderContent()}
-        </div>
-      )}
-    </div>
-  )
+      </BrowserRouter>
+    </ThemeProvider>
+  );
 }
 
-export default App
+export default App;

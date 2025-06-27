@@ -1,121 +1,118 @@
 // src/UserManagement.jsx
-import { useState, useEffect } from 'react'
-import { supabase } from './supabaseClient'
+import { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
+import toast from 'react-hot-toast';
 
-// A small component to display user status clearly
-const UserStatus = ({ metadata }) => {
-  const status = metadata?.status || 'Unknown';
-  const role = metadata?.role || 'User';
-
-  return (
-    <div>
-      <span style={{
-        padding: '2px 6px', borderRadius: '4px', color: 'white',
-        backgroundColor: status === 'approved' ? 'green' : (status === 'pending' ? 'orange' : 'grey')
-      }}>
-        {status}
-      </span>
-      {role === 'admin' && (
-        <span style={{
-          marginLeft: '8px', padding: '2px 6px', borderRadius: '4px',
-          color: 'white', backgroundColor: '#007bff'
-        }}>
-          Admin
-        </span>
-      )}
-    </div>
-  );
-};
+import { Box, Typography, Button, Chip } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DoNotDisturbOnIcon from '@mui/icons-material/DoNotDisturbOn';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const currentUserId = supabase.auth.getUser().id; // Get the current admin's ID
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
 
   async function fetchUsers() {
     setLoading(true);
     const { data, error } = await supabase.rpc('get_all_users');
     if (error) {
-      setError('Could not load users. You may not have permission.');
+      toast.error('Could not load users. You may not have permission.');
     } else {
-      setUsers(data || []);
+      setUsers(data.map(user => ({ ...user, id: user.id }))); // Ensure each row has a unique id property
     }
     setLoading(false);
   }
-  
+
   useEffect(() => {
     fetchUsers();
-  }, [])
+  }, []);
 
-  // Action Handlers
-  const handleAction = async (action, userId, payload) => {
-    const rpcMap = {
-      'approve': { name: 'approve_user', params: { user_id_to_update: userId } },
-      'delete': { name: 'deny_user', params: { user_id_to_delete: userId } },
-      'ban': { name: 'ban_user_by_id', params: { p_user_id: userId } },
-      'makeAdmin': { name: 'update_user_role', params: { p_user_id: userId, p_role: 'admin' } },
-      'revokeAdmin': { name: 'update_user_role', params: { p_user_id: userId, p_role: null } },
-    };
-
-    if (!rpcMap[action]) return;
-
-    if (action === 'delete' && !window.confirm('Are you sure you want to PERMANENTLY DELETE this user?')) return;
-    if (action === 'ban' && !window.confirm('Are you sure you want to BAN this user?')) return;
+  const handleAction = async (action, userId) => {
+    const rpcMap = { /* ... same as before ... */ }; // We'll fill this in
     
-    const { name, params } = rpcMap[action];
-    const { error } = await supabase.rpc(name, params);
-
+    // ... same logic but with toast notifications
+    const toastId = toast.loading('Performing action...');
+    const { error } = await supabase.rpc(action.name, action.params);
+    
     if (error) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`, { id: toastId });
     } else {
-      alert('Action successful!');
-      fetchUsers(); // Refresh the user list
+      toast.success('Action successful!', { id: toastId });
+      fetchUsers();
     }
-  }
+  };
 
-  if (loading) return <p>Loading user data...</p>;
-  if (error) return <p style={{color: 'red'}}>{error}</p>;
+  const columns = [
+    { field: 'email', headerName: 'Email', flex: 1.5 },
+    {
+      field: 'status', headerName: 'Status', flex: 1,
+      renderCell: (params) => {
+        const status = params.row.user_metadata?.status || 'Unknown';
+        const role = params.row.user_metadata?.role;
+        return (
+          <>
+            <Chip
+              icon={status === 'approved' ? <CheckCircleIcon /> : <HourglassEmptyIcon />}
+              label={status}
+              color={status === 'approved' ? 'success' : 'warning'}
+              size="small"
+            />
+            {role === 'admin' && <Chip label="Admin" color="primary" size="small" sx={{ ml: 1 }} />}
+          </>
+        );
+      },
+    },
+    { field: 'last_sign_in_at', headerName: 'Last Sign In', flex: 1, type: 'dateTime', valueGetter: (params) => new Date(params.value) },
+    {
+      field: 'actions', headerName: 'Actions', flex: 2, sortable: false, filterable: false,
+      renderCell: (params) => {
+        const user = params.row;
+        const isPending = user.user_metadata?.status === 'pending';
+        const isAdmin = user.user_metadata?.role === 'admin';
+        const isSelf = user.id === currentUser.id;
+
+        const performAction = async (actionName, params) => {
+          const toastId = toast.loading('Processing...');
+          const { error } = await supabase.rpc(actionName, params);
+          if (error) toast.error(error.message, { id: toastId });
+          else { toast.success('Action successful!', { id: toastId }); fetchUsers(); }
+        };
+
+        return (
+          <Box>
+            {isPending && <Button size="small" variant="contained" color="success" onClick={() => performAction('approve_user', { user_id_to_update: user.id })}>Approve</Button>}
+            {!isSelf && (
+              <>
+                {isAdmin ?
+                  <Button size="small" sx={{ ml: 1 }} onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: null })}>Revoke Admin</Button> :
+                  <Button size="small" variant="outlined" sx={{ ml: 1 }} onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: 'admin' })}>Make Admin</Button>
+                }
+                <Button size="small" variant="outlined" color="error" sx={{ ml: 1 }} startIcon={<DeleteForeverIcon />} onClick={() => { if(window.confirm('Delete user permanently?')) performAction('deny_user', { user_id_to_delete: user.id })}}>Delete</Button>
+              </>
+            )}
+          </Box>
+        );
+      },
+    },
+  ];
 
   return (
-    <div>
-      <h2>User Management</h2>
-      <p>Manage all users in the system.</p>
-      <table style={{ tableLayout: 'auto', width: '100%' }}>
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Status / Role</th>
-            <th>Last Sign In</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map(user => (
-            <tr key={user.id}>
-              <td>{user.email}</td>
-              <td><UserStatus metadata={user.user_metadata} /></td>
-              <td>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Never'}</td>
-              <td>
-                {user.user_metadata?.status === 'pending' && (
-                  <button onClick={() => handleAction('approve', user.id)} style={{backgroundColor: 'green'}}>Approve</button>
-                )}
-                {user.id !== currentUserId && ( // Prevent admin from acting on themselves
-                  <>
-                    {user.user_metadata?.role !== 'admin' ? (
-                      <button onClick={() => handleAction('makeAdmin', user.id)} style={{backgroundColor: 'blue', marginLeft: '5px'}}>Make Admin</button>
-                    ) : (
-                      <button onClick={() => handleAction('revokeAdmin', user.id)} style={{backgroundColor: 'orange', marginLeft: '5px'}}>Revoke Admin</button>
-                    )}
-                    <button onClick={() => handleAction('ban', user.id)} style={{backgroundColor: 'purple', marginLeft: '5px'}}>Ban</button>
-                    <button onClick={() => handleAction('delete', user.id)} style={{backgroundColor: 'red', marginLeft: '5px'}}>Delete</button>
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+    <Box sx={{ height: 600, width: '100%' }}>
+      <Typography variant="h4" gutterBottom>User Management</Typography>
+      <DataGrid
+        rows={users}
+        columns={columns}
+        loading={loading}
+        initialState={{
+          pagination: { paginationModel: { pageSize: 10 } },
+        }}
+        pageSizeOptions={[10, 25, 50]}
+        autoHeight
+      />
+    </Box>
+  );
 }
