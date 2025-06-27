@@ -1,13 +1,15 @@
 // src/Layout.jsx
-import { Outlet, Link as RouterLink } from 'react-router-dom';
+
+import { Link as RouterLink } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AppBar, Box, CssBaseline, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, CssBaseline, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Button } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 
 const drawerWidth = 240;
 
-export default function Layout({ onSignOut }) {
+// Notice this component now accepts 'children' and 'session' as props
+export default function Layout({ children, onSignOut, session }) {
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
@@ -16,11 +18,11 @@ export default function Layout({ onSignOut }) {
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            MUDEK Analysis Tool
+            MUDEK
           </Typography>
-          <button onClick={onSignOut} style={{ color: 'white', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>
+          <Button color="inherit" onClick={onSignOut}>
             Sign Out
-          </button>
+          </Button>
         </Toolbar>
       </AppBar>
 
@@ -41,19 +43,23 @@ export default function Layout({ onSignOut }) {
                 <ListItemText primary="Dashboard" />
               </ListItemButton>
             </ListItem>
-            <ListItem disablePadding component={RouterLink} to="/users" sx={{color: 'inherit', textDecoration: 'none'}}>
-              <ListItemButton>
-                <ListItemIcon><PeopleIcon /></ListItemIcon>
-                <ListItemText primary="Manage Users" />
-              </ListItemButton>
-            </ListItem>
+            
+            {session?.user?.user_metadata?.role === 'admin' && (
+              <ListItem disablePadding component={RouterLink} to="/users" sx={{color: 'inherit', textDecoration: 'none'}}>
+                <ListItemButton>
+                  <ListItemIcon><PeopleIcon /></ListItemIcon>
+                  <ListItemText primary="Manage Users" />
+                </ListItemButton>
+              </ListItem>
+            )}
           </List>
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: '#f4f6f8' }}>
         <Toolbar />
-        <Outlet /> {/* This is where our page components will be rendered */}
+        {/* We now render 'children' directly instead of an Outlet */}
+        {children}
       </Box>
     </Box>
   );
