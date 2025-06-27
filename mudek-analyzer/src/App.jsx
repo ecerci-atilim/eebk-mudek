@@ -3,30 +3,26 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { ThemeProvider, createTheme, Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
+import { Toaster } from 'react-hot-toast';
 
+import { ThemeProvider } from './ThemeContext'; // Use our custom provider
 import Auth from './Auth';
 import Layout from './Layout';
 import Dashboard from './Dashboard';
 import UserManagement from './UserManagement';
+import Settings from './Settings';
 
-const theme = createTheme();
-
-// A helper component to wrap our protected routes
 function ProtectedRoute({ session, children }) {
   if (!session) {
-    // If no session, redirect to the login page
     return <Navigate to="/login" replace />;
   }
-  // If there is a session, render the children components
   return children;
 }
 
-// A specific helper for admin-only routes
 function AdminRoute({ session, children }) {
-  const isAdmin = session?.user?.user_metadata?.role === 'admin';
-  if (!session || !isAdmin) {
-    // If not an admin, redirect to the dashboard
+  const isAuthorized = ['admin', 'owner'].includes(session?.user?.user_metadata?.role);
+  if (!session || !isAuthorized) {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -64,24 +60,22 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider>
       <BrowserRouter>
+        <Toaster position="top-center" reverseOrder={false} />
         <Routes>
-          {/* Public Route: The Login Page */}
           <Route path="/login" element={<Auth />} />
           
-          {/* Protected Routes: All pages inside the layout */}
           <Route 
             path="/" 
             element={
               <ProtectedRoute session={session}>
                 <Layout onSignOut={handleSignOut} session={session}>
-                  <Outlet /> {/* The Outlet now lives here */}
+                  <Outlet />
                 </Layout>
               </ProtectedRoute>
             }
           >
-            {/* These are the child routes that will be rendered inside the Layout's Outlet */}
             <Route index element={<Dashboard session={session} />} />
             <Route 
               path="users" 
@@ -91,9 +85,9 @@ function App() {
                 </AdminRoute>
               } 
             />
+            <Route path="settings" element={<Settings />} />
           </Route>
 
-          {/* Fallback redirect */}
           <Route path="*" element={<Navigate to={session ? "/" : "/login"} />} />
         </Routes>
       </BrowserRouter>

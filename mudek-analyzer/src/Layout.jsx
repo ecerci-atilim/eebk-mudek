@@ -5,15 +5,15 @@ import { Toaster } from 'react-hot-toast';
 import { AppBar, Box, CssBaseline, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography, Button } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 const drawerWidth = 240;
 
-// Notice this component now accepts 'children' and 'session' as props
 export default function Layout({ children, onSignOut, session }) {
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
-      <Toaster position="top-center" reverseOrder={false} />
+      {/* The Toaster component was correctly moved to App.jsx */}
 
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
@@ -44,7 +44,7 @@ export default function Layout({ children, onSignOut, session }) {
               </ListItemButton>
             </ListItem>
             
-            {session?.user?.user_metadata?.role === 'admin' && (
+            {['admin', 'owner'].includes(session?.user?.user_metadata?.role) && (
               <ListItem disablePadding component={RouterLink} to="/users" sx={{color: 'inherit', textDecoration: 'none'}}>
                 <ListItemButton>
                   <ListItemIcon><PeopleIcon /></ListItemIcon>
@@ -52,13 +52,19 @@ export default function Layout({ children, onSignOut, session }) {
                 </ListItemButton>
               </ListItem>
             )}
+
+            <ListItem disablePadding component={RouterLink} to="/settings" sx={{color: 'inherit', textDecoration: 'none'}}>
+              <ListItemButton>
+                <ListItemIcon><SettingsIcon /></ListItemIcon>
+                <ListItemText primary="My Account" />
+              </ListItemButton>
+            </ListItem>
           </List>
         </Box>
       </Drawer>
 
       <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: '#f4f6f8' }}>
         <Toolbar />
-        {/* We now render 'children' directly instead of an Outlet */}
         {children}
       </Box>
     </Box>

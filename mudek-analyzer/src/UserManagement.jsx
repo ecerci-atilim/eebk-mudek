@@ -11,6 +11,7 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -58,12 +59,12 @@ export default function UserManagement() {
         
         return (
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Chip
-              icon={status === 'approved' ? <CheckCircleIcon /> : <HourglassEmptyIcon />}
-              label={status}
-              color={status === 'approved' ? 'success' : 'warning'}
-              size="small"
-            />
+            {status === 'deletion_requested' ? (
+              <Chip label="Deletion Requested" color="error" size="small" variant="outlined" />
+            ) : (
+              <Chip icon={status === 'approved' ? <CheckCircleIcon /> : <HourglassEmptyIcon />} label={status} color={status === 'approved' ? 'success' : 'warning'} size="small" />
+            )}
+            {role === 'owner' && <Chip label="Owner" color="secondary" size="small" icon={<SupervisorAccountIcon />} />}
             {role === 'admin' && <Chip label="Admin" color="primary" size="small" />}
             {isBanned && <Chip label="Banned" color="error" size="small" icon={<LockIcon />} />}
           </Box>
@@ -76,39 +77,55 @@ export default function UserManagement() {
       renderCell: ({ row }) => {
         const user = row;
         const isPending = user.user_metadata?.status === 'pending';
-        const isAdmin = user.user_metadata?.role === 'admin';
+        const isDeletionRequested = user.user_metadata?.status === 'deletion_requested';
+        const targetIsAdmin = user.user_metadata?.role === 'admin';
+        const targetIsOwner = user.user_metadata?.role === 'owner';
         const isSelf = user.id === currentUser?.id;
         const isBanned = user.banned_until && new Date(user.banned_until) > new Date();
+        const viewerIsOwner = currentUser?.user_metadata?.role === 'owner';
+        const canActOnTarget = viewerIsOwner ? !targetIsOwner : !targetIsAdmin && !targetIsOwner;
 
         return (
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isPending && <Button size="small" variant="contained" color="success" onClick={() => performAction('approve_user', { user_id_to_update: user.id })}>Approve</Button>}
             
-            {!isSelf && (
+            {isDeletionRequested && (
+              <Tooltip title="Permanently delete this user as requested">
+                <Button size="small" variant="contained" color="error" startIcon={<DeleteForeverIcon />} onClick={() => { if(window.confirm('Approve deletion request? This will permanently delete the user.')) performAction('deny_user', { user_id_to_delete: user.id })}}>Approve Deletion</Button>
+              </Tooltip>
+            )}
+
+            {!isSelf && !isDeletionRequested && (
               <>
-                {isAdmin ? (
-                  <Tooltip title="Remove admin privileges from this user">
-                    <Button size="small" variant="outlined" color="warning" onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: null })}>Revoke Admin</Button>
-                  </Tooltip>
-                ) : (
-                  <Tooltip title="Grant admin privileges to this user">
-                    <Button size="small" variant="outlined" onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: 'admin' })}>Make Admin</Button>
-                  </Tooltip>
+                {viewerIsOwner && !targetIsOwner && (
+                  targetIsAdmin ? (
+                    <Tooltip title="Only the owner can revoke admin privileges">
+                      <Button size="small" variant="outlined" color="warning" onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: null })}>Revoke Admin</Button>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title="Only the owner can grant admin privileges">
+                      <Button size="small" variant="outlined" onClick={() => performAction('update_user_role', { p_user_id: user.id, p_role: 'admin' })}>Make Admin</Button>
+                    </Tooltip>
+                  )
                 )}
 
-                {isBanned ? (
-                  <Tooltip title="Allow this user to sign in again">
-                    <Button size="small" variant="outlined" color="success" startIcon={<LockOpenIcon />} onClick={() => performAction('unban_user_by_id', { p_user_id: user.id })}>Unban</Button>
-                  </Tooltip>
-                ) : (
-                  <Tooltip title="Prevent this user from signing in">
-                    <Button size="small" variant="outlined" color="secondary" startIcon={<LockIcon />} onClick={() => { if(window.confirm('Are you sure you want to ban this user?')) performAction('ban_user_by_id', { p_user_id: user.id })}}>Ban</Button>
+                {canActOnTarget && (
+                  isBanned ? (
+                    <Tooltip title="Allow this user to sign in again">
+                      <Button size="small" variant="outlined" color="success" startIcon={<LockOpenIcon />} onClick={() => performAction('unban_user_by_id', { p_user_id: user.id })}>Unban</Button>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title="Prevent this user from signing in">
+                      <Button size="small" variant="outlined" color="secondary" startIcon={<LockIcon />} onClick={() => { if(window.confirm('Ban this user?')) performAction('ban_user_by_id', { p_user_id: user.id })}}>Ban</Button>
+                    </Tooltip>
+                  )
+                )}
+                
+                {canActOnTarget && (
+                  <Tooltip title="Permanently delete this user">
+                    <Button size="small" variant="outlined" color="error" startIcon={<DeleteForeverIcon />} onClick={() => { if(window.confirm('Delete user permanently?')) performAction('deny_user', { user_id_to_delete: user.id })}}>Delete</Button>
                   </Tooltip>
                 )}
-
-                <Tooltip title="Permanently delete this user. This cannot be undone.">
-                  <Button size="small" variant="outlined" color="error" startIcon={<DeleteForeverIcon />} onClick={() => { if(window.confirm('Delete user permanently? This cannot be undone.')) performAction('deny_user', { user_id_to_delete: user.id })}}>Delete</Button>
-                </Tooltip>
               </>
             )}
           </Box>
@@ -116,14 +133,7 @@ export default function UserManagement() {
       },
     },
   ];
-
-  const fetchDataAndRefresh = async () => {
-    await fetchData();
-  };
   
-  // Need to get the full user object including banned_until
-  // so we need to modify the get_all_users function one last time
-  // I will assume you have done this based on the instructions below.
   if (loading) return <CircularProgress />;
 
   return (
